@@ -1,0 +1,65 @@
+image: node:8
+
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - node_modules/
+
+stages:
+  - build
+  - test
+  - deploy
+
+before_script:
+  - node -v
+  - yarn --version
+  - echo '_auth=${NPM_TOKEN}' >> .npmrc
+  - yarn install
+
+check-formatting:
+  stage: test
+  allow_failure: true
+  only:
+    - master
+  script:
+    - yarn format:check $(git rev-parse $CI_COMMIT_SHA^1) $CI_COMMIT_SHA
+
+# check-lint:
+#   stage: test
+#   allow_failure: true
+#   script:
+#     - yarn affected:lint $(git rev-parse $CI_COMMIT_SHA^1) $CI_COMMIT_SHA
+
+# unit-tests:
+#   stage: test
+#   # 后期测试补上移除此项
+#   allow_failure: true
+#   script:
+#     - yarn affected:test $(git rev-parse $CI_COMMIT_SHA^1) $CI_COMMIT_SHA
+
+build:
+  stage: build
+  script:
+    # - yarn affected:build $(git rev-parse $CI_COMMIT_SHA^1) $CI_COMMIT_SHA --prod
+    - yarn build auth --prod
+    - node s3.js
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 3 day
+  when: manual
+
+deploy_devcdn:
+  image: andthensome/docker-node-rsync
+  stage: deploy
+  dependencies:
+    - build
+
+  environment:
+    name: devcdn
+    url: https://xxx.dev.com
+  before_script:
+      - echo "开始部署..."
+  script:
+    - sh rsync.sh 119.19.19.19 /data/wwwroot
+  when: manual
